@@ -129,13 +129,3 @@ From the project root, navigate to the frontend directory and run:
 
 ---
 
-## Additional Considerations (if extending)
-
-- Add localStorage persistence to retain history across refreshes.
-- Implement a real backend and redirect service for production usage.
-- Introduce more robust URL validation and URL canonicalization.
-- Add unit and integration tests (e.g., Jest + React Testing Library).
-
----
-
-If you’d like, I can tailor the README to match your repo’s exact file names or add badges (build status, license), a changelog section, or deployment instructions for GitHub Pages or Vercel.
