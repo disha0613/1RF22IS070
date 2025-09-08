@@ -11,6 +11,9 @@ function App() {
   const [copied, setCopied] = useState(false)
   const [useCustomUrl, setUseCustomUrl] = useState(false)
   const [currentPage, setCurrentPage] = useState('home') //
+  const [batchUrls, setBatchUrls] = useState('')
+  const [useExpiry, setUseExpiry] = useState(true)
+  const [validityMinutes, setValidityMinutes] = useState(30)
 
   const generateShortCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -86,7 +89,8 @@ function App() {
         timestamp: new Date().toLocaleString(),
         isCustom: useCustomUrl && customUrl.trim(),
         clicks: 0,
-        lastClicked: null
+        lastClicked: null,
+        expiresAt: useExpiry ? Date.now() + Number(validityMinutes || 30) * 60 * 1000 : null
       }
       setUrlHistory(prev => [newEntry, ...prev])
       
@@ -99,9 +103,59 @@ function App() {
       }
     }, 1000)
   }
+  
+  const handleBatchShorten = (e) => {
+    e.preventDefault()
+    setError('')
+    const lines = batchUrls.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    if (lines.length === 0) {
+      setError('Please enter at least one URL')
+      return
+    }
+    if (lines.length > 5) {
+      setError('You can shorten up to 5 URLs at a time')
+      return
+    }
+
+    const entries = []
+    for (const line of lines) {
+      if (!isValidUrl(line)) {
+        setError(`Invalid URL: ${line}. Include http:// or https://`)
+        return
+      }
+      const shortCode = generateShortCode()
+      const newShortUrl = `https://short.ly/${shortCode}`
+      entries.push({
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        original: line,
+        short: newShortUrl,
+        timestamp: new Date().toLocaleString(),
+        isCustom: false,
+        clicks: 0,
+        lastClicked: null,
+        expiresAt: useExpiry ? Date.now() + Number(validityMinutes || 30) * 60 * 1000 : null
+      })
+    }
+
+    setUrlHistory(prev => [...entries, ...prev])
+    setBatchUrls('')
+  }
 
   // Handle clicking on shortened URL to redirect
   const handleUrlClick = (originalUrl, urlId) => {
+    // Check expiry
+    let targetEntry = null
+    if (urlId) {
+      targetEntry = urlHistory.find(e => e.id === urlId)
+    } else {
+      // fallback: find latest entry with this original
+      targetEntry = urlHistory.find(e => e.original === originalUrl)
+    }
+    if (targetEntry && targetEntry.expiresAt && Date.now() > targetEntry.expiresAt) {
+      alert('This link has expired.')
+      return
+    }
+
     window.open(originalUrl, '_blank')
     
     // Update click count
@@ -225,6 +279,48 @@ function App() {
             {error && <div className="error-message">{error}</div>}
           </form>
 
+          <div className="batch-container">
+            <h3>Batch shorten (up to 5)</h3>
+            <form onSubmit={handleBatchShorten} className="batch-form">
+              <textarea
+                className="batch-textarea"
+                placeholder="Enter up to 5 URLs, one per line..."
+                rows={5}
+                value={batchUrls}
+                onChange={(e) => setBatchUrls(e.target.value)}
+              />
+              <div className="batch-actions">
+                <div className="expiry-controls">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={useExpiry}
+                      onChange={(e) => setUseExpiry(e.target.checked)}
+                      className="toggle-checkbox"
+                    />
+                    <span className="toggle-text">Set validity</span>
+                  </label>
+                  {useExpiry && (
+                    <div className="expiry-input-group">
+                      <label className="expiry-label" htmlFor="validityMinutes">Validity (minutes):</label>
+                      <input
+                        id="validityMinutes"
+                        type="number"
+                        min={1}
+                        max={24 * 60}
+                        value={validityMinutes}
+                        onChange={(e) => setValidityMinutes(e.target.value)}
+                        className="expiry-input"
+                      />
+                      <span className="expiry-hint">Default is 30</span>
+                    </div>
+                  )}
+                </div>
+                <button type="submit" className="shorten-btn">Shorten All</button>
+              </div>
+            </form>
+          </div>
+
           {shortenedUrl && (
             <div className="result-container">
               <div className="result-header">
@@ -280,7 +376,17 @@ function App() {
                       </span>
                       {entry.isCustom && <span className="custom-badge">Custom</span>}
                     </div>
-                    <div className="timestamp">{entry.timestamp}</div>
+                    <div className="timestamp">
+                      {entry.timestamp}
+                      {entry.expiresAt && (
+                        <>
+                          {' '}
+                          <span className={Date.now() > entry.expiresAt ? 'expired-badge' : 'valid-badge'}>
+                            {Date.now() > entry.expiresAt ? 'Expired' : `Valid until ${new Date(entry.expiresAt).toLocaleString()}`}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                   <button 
                     onClick={() => navigator.clipboard.writeText(entry.short)}
@@ -367,7 +473,16 @@ function App() {
                         ) : (
                           <span className="random-badge">Random</span>
                         )}
-      </div>
+                      </div>
+                      <div className="col-expiry" data-label="Expiry">
+                        {entry.expiresAt ? (
+                          Date.now() > entry.expiresAt ?
+                            <span className="expired-badge">Expired</span> :
+                            <span className="valid-badge">Valid until {new Date(entry.expiresAt).toLocaleString()}</span>
+                        ) : (
+                          <span className="no-expiry">No expiry</span>
+                        )}
+                      </div>
                       <div className="col-actions" data-label="Actions">
                         <button 
                           onClick={() => navigator.clipboard.writeText(entry.short)}
